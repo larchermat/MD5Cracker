@@ -1,4 +1,3 @@
-import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
@@ -12,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
-public class Master implements MasterIF {
+public class Master implements MasterIF, ClientCommInterface{
     String hash;
     final Map<String, Integer> hashMap;
     final List<SlaveInfo> slaves;
@@ -237,5 +236,8 @@ public class Master implements MasterIF {
         latch.countDown();
     }
 
+    @Override
+    public void publishProblem(byte[] hash, int problemsize) throws Exception {
 
+    }
 }

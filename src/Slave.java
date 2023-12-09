@@ -5,13 +5,15 @@ import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Scanner;
 import java.util.concurrent.CountDownLatch;
 
-public class Slave implements SlaveIF {
+public class Slave implements SlaveIF{
     boolean running;
     String hash;
-    BSTree tree;
+    Map<String, Integer> wordsMap;
     int increment;
     int current;
     MessageDigest md;
@@ -63,14 +65,9 @@ public class Slave implements SlaveIF {
     }
 
     public void search() {
-        int checksum = 0;
-        for (int j = 0; j < hash.length(); j++) {
-            checksum += hash.charAt(j);
-        }
-        TreeNode n = tree.find(checksum);
-        if (n != null) {
+        if (wordsMap != null) {
             try {
-                int num = n.getNumberForHash(hash);
+                int num = wordsMap.get(hash);
                 master.receiveSolution(hash, num);
             } catch (RuntimeException e) {
                 e.printStackTrace();
@@ -106,11 +103,9 @@ public class Slave implements SlaveIF {
         }
         try {
             String hashStr = new String(hash, "UTF-8");
-            int checksum = 0;
-            for (int j = 0; j < hashStr.length(); j++) {
-                checksum += hashStr.charAt(j);
-            }
-            tree = new BSTree(checksum, hashStr, current);
+            wordsMap = new HashMap<>();
+            wordsMap.put(hashStr, current);
+            // tree = new BSTree(checksum, hashStr, current);
             current = current + increment;
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
@@ -171,11 +166,7 @@ public class Slave implements SlaveIF {
         }
         try {
             String hashStr = new String(bytes, "UTF-8");
-            int checksum = 0;
-            for (int j = 0; j < hashStr.length(); j++) {
-                checksum += hashStr.charAt(j);
-            }
-            tree.add(checksum, hashStr, current);
+            wordsMap.put(hashStr, current);
             if (hash.equals(hashStr)) {
                 master.receiveSolution(hashStr, current);
             }
