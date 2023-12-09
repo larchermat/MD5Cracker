@@ -4,6 +4,7 @@ import java.rmi.Naming;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
+import java.rmi.server.UnicastRemoteObject;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -12,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
-public class Master implements MasterIF, ClientCommInterface {
+public class Master extends UnicastRemoteObject implements MasterIF, ClientCommInterface {
     ServerCommInterface server;
     String hash;
     final Map<String, Integer> hashMap;
@@ -28,7 +29,7 @@ public class Master implements MasterIF, ClientCommInterface {
     boolean updated;
     private CountDownLatch latch;
 
-    public Master() {
+    public Master() throws RemoteException {
         super();
 
         try {
@@ -37,6 +38,7 @@ public class Master implements MasterIF, ClientCommInterface {
             throw new RuntimeException(e);
         }
 
+        hash = "";
         slaves = new ArrayList<>();
         slavesUpdatedList = new ArrayList<>();
         slavesWaitingList = new ArrayList<>();
@@ -45,6 +47,8 @@ public class Master implements MasterIF, ClientCommInterface {
         increment = 1;
         updated = true;
         waiting = false;
+        slavesUpdated = true;
+        slavesWaiting = false;
         try {
             md = MessageDigest.getInstance("MD5");
         } catch (NoSuchAlgorithmException e) {
@@ -52,30 +56,36 @@ public class Master implements MasterIF, ClientCommInterface {
         }
 
         try {
+            Naming.rebind("rmi://localhost/CrackerMasterService", this);
+            System.out.println("Master started correctly");
+        } catch (RemoteException | MalformedURLException e) {
+            System.out.println("Cracker master failed");
+            throw new RuntimeException(e);
+        }
+
+        try {
+            Naming.rebind("rmi://localhost/FSociety", this);
             server.register("FSociety", this);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+        lifecycle();
     }
 
     public static void main(String[] args) {
         try {
-            LocateRegistry.createRegistry(1099);
-            MasterIF master = new Master();
-            Naming.rebind("rmi://localhost/CrackerMasterService", master);
-            System.out.println("Master started correctly");
-            Naming.rebind("rmi://localhost/FSociety", master);
-        } catch (RemoteException | MalformedURLException e) {
+            new Master();
+        } catch (RemoteException e) {
             System.out.println("Cracker master failed");
             throw new RuntimeException(e);
         }
     }
 
     @Override
-    public void receiveSolution(String hash, int solution) throws RemoteException {
+    public void receiveSolution(String hash, int solution, String thread) throws RemoteException {
         if (this.hash.equals(hash)) {
             try {
-                server.submitSolution("FSociety", String.valueOf(solution));
+                server.submitSolution(thread, String.valueOf(solution));
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -84,6 +94,7 @@ public class Master implements MasterIF, ClientCommInterface {
 
     @Override
     synchronized public void registerSlave(String[] details) throws RemoteException {
+        System.out.println("New slave");
         try {
             SlaveIF newSlave = (SlaveIF) Naming.lookup("rmi://" + details[0] + "/" + details[1]);
             synchronized (slaves) {
@@ -119,6 +130,7 @@ public class Master implements MasterIF, ClientCommInterface {
     }
 
     public void lifecycle() {
+        System.out.println("lifecycle started");
         while (true) {
             if (!waiting) {
                 run();
@@ -135,7 +147,6 @@ public class Master implements MasterIF, ClientCommInterface {
     synchronized public void updateSlaves() {
         latch = new CountDownLatch(1);
         waiting = true;
-        updated = false;
         int size;
         synchronized (slaves) {
             size = slaves.size();
@@ -143,27 +154,42 @@ public class Master implements MasterIF, ClientCommInterface {
         while (!slavesUpdated) {
         }
         synchronized (slaves) {
-            for (SlaveInfo s : slaves)
-                s.slaveIF.setWaiting(true);
+            for (SlaveInfo s : slaves) {
+                try {
+                    s.slaveIF.setWaiting(true);
+                } catch (RemoteException e) {
+                    throw new RuntimeException(e);
+                }
+            }
         }
         int max = current;
         while (!slavesWaiting) {
         }
         synchronized (slaves) {
             for (SlaveInfo s : slaves) {
-                int slaveCurrent = s.slaveIF.getCurrent();
+                int slaveCurrent = 0;
+                try {
+                    slaveCurrent = s.slaveIF.getCurrent();
+                } catch (RemoteException e) {
+                    throw new RuntimeException(e);
+                }
                 if (slaveCurrent > max)
                     max = slaveCurrent;
             }
+            updated = false;
             update(size + 1, max);
             waiting = false;
             for (SlaveInfo s : slaves) {
-                if (s.slaveIF.isRunning()) {
-                    slavesUpdatedList.set(slaves.indexOf(s), false);
-                    s.slaveIF.update(size + 1, max);
-                    s.slaveIF.setWaiting(false);
-                } else {
-                    s.slaveIF.start(max + increment, size + 1, "localhost", slaves.indexOf(s));
+                try {
+                    if (s.slaveIF.isRunning()) {
+                        slavesUpdatedList.set(slaves.indexOf(s), false);
+                        s.slaveIF.update(size + 1, max);
+                        s.slaveIF.setWaiting(false);
+                    } else {
+                        s.slaveIF.start(max + increment, size + 1, "localhost", slaves.indexOf(s));
+                    }
+                } catch (RemoteException e){
+                    throw new RuntimeException(e);
                 }
             }
         }
@@ -199,11 +225,13 @@ public class Master implements MasterIF, ClientCommInterface {
             synchronized (hashMap) {
                 hashMap.put(hashStr, current);
             }
-            if (hashStr.equals(hash)) {
-                try {
-                    receiveSolution(hashStr, current);
-                } catch (RemoteException e) {
-                    e.printStackTrace();
+            synchronized (hash) {
+                if (hashStr.equals(hash)) {
+                    try {
+                        receiveSolution(hashStr, current, "master");
+                    } catch (RemoteException e) {
+                        e.printStackTrace();
+                    }
                 }
             }
             current = current + increment;
@@ -213,15 +241,17 @@ public class Master implements MasterIF, ClientCommInterface {
     }
 
     public void search() {
-        Integer solution;
-        synchronized (hashMap) {
-            solution = hashMap.getOrDefault(hash, null);
-        }
-        if (solution != null) {
-            try {
-                receiveSolution(hash, solution);
-            } catch (RemoteException e) {
-                throw new RuntimeException(e);
+        synchronized (hash) {
+            Integer solution;
+            synchronized (hashMap) {
+                solution = hashMap.getOrDefault(hash, null);
+            }
+            if (solution != null) {
+                try {
+                    receiveSolution(hash, solution, "master");
+                } catch (RemoteException e) {
+                    throw new RuntimeException(e);
+                }
             }
         }
     }
@@ -243,7 +273,9 @@ public class Master implements MasterIF, ClientCommInterface {
 
     @Override
     public void publishProblem(byte[] hash, int problemsize) throws Exception {
-        this.hash = new String(hash, "UTF-8");
+        synchronized (this.hash) {
+            this.hash = new String(hash, "UTF-8");
+        }
         synchronized (slaves) {
             slaves.forEach(slaveInfo ->
             {

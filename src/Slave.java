@@ -3,6 +3,7 @@ import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
+import java.rmi.server.UnicastRemoteObject;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
@@ -10,7 +11,7 @@ import java.util.Map;
 import java.util.Scanner;
 import java.util.concurrent.CountDownLatch;
 
-public class Slave implements SlaveIF {
+public class Slave extends UnicastRemoteObject implements SlaveIF {
     boolean running;
     String hash;
     final Map<String, Integer> wordsMap;
@@ -22,7 +23,7 @@ public class Slave implements SlaveIF {
     boolean waiting;
     private CountDownLatch latch;
 
-    public Slave() throws NoSuchAlgorithmException, UnsupportedEncodingException {
+    public Slave() throws NoSuchAlgorithmException, UnsupportedEncodingException, RemoteException {
         super();
         md = MessageDigest.getInstance("MD5");
         hash = "";
@@ -42,7 +43,7 @@ public class Slave implements SlaveIF {
         SlaveIF slave;
         try {
             slave = new Slave();
-        } catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
+        } catch (NoSuchAlgorithmException | UnsupportedEncodingException | RemoteException e) {
             throw new RuntimeException(e);
         }
 
@@ -72,7 +73,7 @@ public class Slave implements SlaveIF {
         }
         if (solution != null) {
             try {
-                master.receiveSolution(hash, solution);
+                master.receiveSolution(hash, solution, "slave" + slaveNumber);
             } catch (RemoteException e) {
                 throw new RuntimeException(e);
             }
@@ -87,6 +88,7 @@ public class Slave implements SlaveIF {
 
     @Override
     public void start(int base, int increment, String masterHostName, int slaveNumber) {
+        System.out.println("Slave running");
         try {
             master = (MasterIF) Naming.lookup("rmi://" + masterHostName + "/CrackerMasterService");
         } catch (NotBoundException | MalformedURLException | RemoteException e) {
@@ -106,7 +108,7 @@ public class Slave implements SlaveIF {
                     master.slaveWaiting(slaveNumber, true);
                     latch.await();
                     master.slaveWaiting(slaveNumber, false);
-                } catch (InterruptedException e) {
+                } catch (InterruptedException | RemoteException e) {
                     throw new RuntimeException(e);
                 }
             }
@@ -135,7 +137,11 @@ public class Slave implements SlaveIF {
             run();
         }
         increment = newIncrement;
-        master.slaveUpdated(slaveNumber);
+        try {
+            master.slaveUpdated(slaveNumber);
+        } catch (RemoteException e) {
+            throw new RuntimeException(e);
+        }
         latch.countDown();
     }
 
@@ -158,7 +164,7 @@ public class Slave implements SlaveIF {
                 wordsMap.put(hashStr, current);
             }
             if (hash.equals(hashStr)) {
-                master.receiveSolution(hashStr, current);
+                master.receiveSolution(hashStr, current, "slave" + slaveNumber);
             }
             current = current + increment;
         } catch (UnsupportedEncodingException | RemoteException e) {
