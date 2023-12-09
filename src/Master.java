@@ -6,10 +6,7 @@ import java.rmi.registry.LocateRegistry;
 import java.util.ArrayList;
 import java.util.List;
 
-import client.ClientCommInterface;
-import server.ServerCommInterface;
-
-public class Master implements MasterIF, ServerCommInterface{
+public class Master implements MasterIF, ClientCommInterface{
     String hash;
     List<SlaveInfo> slaves;
     boolean slavesUpdated;
@@ -113,16 +110,7 @@ public class Master implements MasterIF, ServerCommInterface{
     }
 
     @Override
-    public void register(String teamName, ClientCommInterface cc) throws Exception {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'register'");
+    public void publishProblem(byte[] hash, int problemsize) throws Exception {
+
     }
-
-    @Override
-    public void submitSolution(String name, String sol) throws Exception {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'submitSolution'");
-    }
-
-
 }

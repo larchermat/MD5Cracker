@@ -9,9 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 
-import client.ClientCommInterface;
-
-public class Slave implements SlaveIF, ClientCommInterface{
+public class Slave implements SlaveIF{
     boolean running;
     String hash;
     Map<String, Integer> wordsMap;
@@ -164,11 +162,5 @@ public class Slave implements SlaveIF, ClientCommInterface{
         } catch (UnsupportedEncodingException | RemoteException e) {
             e.printStackTrace();
         }
-    }
-
-    @Override
-    public void publishProblem(byte[] hash, int problemsize) throws Exception {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'publishProblem'");
     }
 }
