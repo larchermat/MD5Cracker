@@ -1,3 +1,4 @@
+import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
@@ -11,7 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
-public class Master implements MasterIF, ClientCommInterface{
+public class Master implements MasterIF, ClientCommInterface {
+    ServerCommInterface server;
     String hash;
     final Map<String, Integer> hashMap;
     final List<SlaveInfo> slaves;
@@ -28,6 +30,13 @@ public class Master implements MasterIF, ClientCommInterface{
 
     public Master() {
         super();
+
+        try {
+            server = (ServerCommInterface) Naming.lookup("rmi://localhost/ServerCommService");
+        } catch (NotBoundException | MalformedURLException | RemoteException e) {
+            throw new RuntimeException(e);
+        }
+
         slaves = new ArrayList<>();
         slavesUpdatedList = new ArrayList<>();
         slavesWaitingList = new ArrayList<>();
@@ -41,6 +50,12 @@ public class Master implements MasterIF, ClientCommInterface{
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
+
+        try {
+            server.register("FSociety", this);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public static void main(String[] args) {
@@ -49,6 +64,7 @@ public class Master implements MasterIF, ClientCommInterface{
             MasterIF master = new Master();
             Naming.rebind("rmi://localhost/CrackerMasterService", master);
             System.out.println("Master started correctly");
+            Naming.rebind("rmi://localhost/FSociety", master);
         } catch (RemoteException | MalformedURLException e) {
             System.out.println("Cracker master failed");
             throw new RuntimeException(e);
@@ -58,7 +74,11 @@ public class Master implements MasterIF, ClientCommInterface{
     @Override
     public void receiveSolution(String hash, int solution) throws RemoteException {
         if (this.hash.equals(hash)) {
-            /*TODO*/
+            try {
+                server.submitSolution("FSociety", String.valueOf(solution));
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 
@@ -96,21 +116,6 @@ public class Master implements MasterIF, ClientCommInterface{
             slavesWaitingList.set(slaveNumber, slaveWaiting);
         }
         setSlavesWaiting();
-    }
-
-    public void getNewHash() {
-        /*TODO: getting hash from professor method*/
-        synchronized (slaves) {
-            slaves.forEach(slaveInfo ->
-            {
-                try {
-                    slaveInfo.slaveIF.receiveTask(this.hash);
-                } catch (RemoteException e) {
-                    throw new RuntimeException(e);
-                }
-            });
-        }
-        search();
     }
 
     public void lifecycle() {
@@ -238,6 +243,17 @@ public class Master implements MasterIF, ClientCommInterface{
 
     @Override
     public void publishProblem(byte[] hash, int problemsize) throws Exception {
-
+        this.hash = new String(hash, "UTF-8");
+        synchronized (slaves) {
+            slaves.forEach(slaveInfo ->
+            {
+                try {
+                    slaveInfo.slaveIF.receiveTask(this.hash);
+                } catch (RemoteException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        }
+        search();
     }
 }

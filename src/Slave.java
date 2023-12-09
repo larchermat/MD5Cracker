@@ -10,10 +10,10 @@ import java.util.Map;
 import java.util.Scanner;
 import java.util.concurrent.CountDownLatch;
 
-public class Slave implements SlaveIF{
+public class Slave implements SlaveIF {
     boolean running;
     String hash;
-    Map<String, Integer> wordsMap;
+    final Map<String, Integer> wordsMap;
     int increment;
     int current;
     MessageDigest md;
@@ -27,6 +27,7 @@ public class Slave implements SlaveIF{
         md = MessageDigest.getInstance("MD5");
         hash = "";
         current = 0;
+        wordsMap = new HashMap<>();
     }
 
     public static void main(String[] args) {
@@ -65,14 +66,15 @@ public class Slave implements SlaveIF{
     }
 
     public void search() {
-        if (wordsMap != null) {
+        Integer solution;
+        synchronized (wordsMap) {
+            solution = wordsMap.getOrDefault(hash, null);
+        }
+        if (solution != null) {
             try {
-                int num = wordsMap.get(hash);
-                master.receiveSolution(hash, num);
-            } catch (RuntimeException e) {
-                e.printStackTrace();
+                master.receiveSolution(hash, solution);
             } catch (RemoteException e) {
-                e.printStackTrace();
+                throw new RuntimeException(e);
             }
         }
     }
@@ -95,28 +97,15 @@ public class Slave implements SlaveIF{
         current = base;
         this.increment = increment;
         this.slaveNumber = slaveNumber;
-        byte[] hash = new byte[0];
-        try {
-            hash = md.digest((String.valueOf(current).getBytes("UTF-8")));
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-        }
-        try {
-            String hashStr = new String(hash, "UTF-8");
-            wordsMap = new HashMap<>();
-            wordsMap.put(hashStr, current);
-            // tree = new BSTree(checksum, hashStr, current);
-            current = current + increment;
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-        }
 
         while (running) {
             if (!waiting) {
                 run();
             } else {
                 try {
+                    master.slaveWaiting(slaveNumber, true);
                     latch.await();
+                    master.slaveWaiting(slaveNumber, false);
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
@@ -135,7 +124,7 @@ public class Slave implements SlaveIF{
     }
 
     @Override
-    public void update(int newIncrement, int changingPoint) {
+    synchronized public void update(int newIncrement, int changingPoint) {
         for (int i = 0; i < increment; i++) {
             if ((changingPoint - i - current) % increment == 0) {
                 changingPoint -= i;
@@ -151,10 +140,9 @@ public class Slave implements SlaveIF{
     }
 
     @Override
-    public void setWaiting(boolean waiting) {
+    synchronized public void setWaiting(boolean waiting) {
         latch = new CountDownLatch(1);
         this.waiting = waiting;
-        master.slaveWaiting(slaveNumber, waiting);
     }
 
     synchronized public void run() {
@@ -166,7 +154,9 @@ public class Slave implements SlaveIF{
         }
         try {
             String hashStr = new String(bytes, "UTF-8");
-            wordsMap.put(hashStr, current);
+            synchronized (wordsMap) {
+                wordsMap.put(hashStr, current);
+            }
             if (hash.equals(hashStr)) {
                 master.receiveSolution(hashStr, current);
             }
