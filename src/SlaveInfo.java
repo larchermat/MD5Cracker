@@ -1,12 +1,8 @@
 public class SlaveInfo {
-    boolean updated;
-    boolean waiting;
     int slaveNumber;
     SlaveIF slaveIF;
 
-    public SlaveInfo(boolean updated, boolean waiting, int slaveNumber, SlaveIF slaveIF) {
-        this.updated = updated;
-        this.waiting = waiting;
+    public SlaveInfo(int slaveNumber, SlaveIF slaveIF) {
         this.slaveNumber = slaveNumber;
         this.slaveIF = slaveIF;
     }

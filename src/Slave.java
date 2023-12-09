@@ -6,6 +6,7 @@ import java.rmi.RemoteException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Scanner;
+import java.util.concurrent.CountDownLatch;
 
 public class Slave implements SlaveIF {
     boolean running;
@@ -17,11 +18,13 @@ public class Slave implements SlaveIF {
     MasterIF master;
     int slaveNumber;
     boolean waiting;
+    private CountDownLatch latch;
 
     public Slave() throws NoSuchAlgorithmException, UnsupportedEncodingException {
         super();
         md = MessageDigest.getInstance("MD5");
         hash = "";
+        current = 0;
     }
 
     public static void main(String[] args) {
@@ -112,9 +115,17 @@ public class Slave implements SlaveIF {
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
         }
+
         while (running) {
-            while(waiting){}
-            run();
+            if (!waiting) {
+                run();
+            } else {
+                try {
+                    latch.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
         }
     }
 
@@ -130,27 +141,28 @@ public class Slave implements SlaveIF {
 
     @Override
     public void update(int newIncrement, int changingPoint) {
-        while(waiting){}
         for (int i = 0; i < increment; i++) {
-            if((changingPoint - i - current) % increment == 0){
+            if ((changingPoint - i - current) % increment == 0) {
                 changingPoint -= i;
                 break;
             }
         }
-        while (current <= changingPoint){
+        while (current < changingPoint) {
             run();
         }
         increment = newIncrement;
         master.slaveUpdated(slaveNumber);
+        latch.countDown();
     }
 
     @Override
     public void setWaiting(boolean waiting) {
+        latch = new CountDownLatch(1);
         this.waiting = waiting;
         master.slaveWaiting(slaveNumber, waiting);
     }
 
-    public void run() {
+    synchronized public void run() {
         byte[] bytes = new byte[0];
         try {
             bytes = md.digest((String.valueOf(current).getBytes("UTF-8")));
