@@ -9,7 +9,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.CountDownLatch;
 
 public class ServerStub extends UnicastRemoteObject implements ServerCommInterface {
-    final static String[] hashes = {"1532", "34", "19857", "12", "1", "27", "98753", "1234555", "89832", "3"};
+    final static String[] hashes = {"34", "19857", "98753", "234928", "89832", "3", "1532343", "1532344", "1532345", "1532346",
+            "2532346", "2532347", "2532348", "2532349", "5532350", "5532346", "5532347", "5532348", "5532349", "5532350"};
     static String currentWord = "";
     static MessageDigest md;
     static ClientCommInterface client;
@@ -39,11 +40,7 @@ public class ServerStub extends UnicastRemoteObject implements ServerCommInterfa
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
-        /*long start = System.currentTimeMillis();
-        long current = System.currentTimeMillis();
-        while(start - current < 5000){
-            current = System.currentTimeMillis();
-        }*/
+
         for (int i = 0; i < hashes.length; i++) {
             latch = new CountDownLatch(1);
             try {

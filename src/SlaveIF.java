@@ -3,7 +3,7 @@ import java.rmi.RemoteException;
 
 public interface SlaveIF extends Remote {
     void receiveTask(String hash) throws RemoteException;
-    void start(int base, int increment, String masterHostname, int slaveNumber) throws RemoteException;
+    void start(int base, int increment, String masterHostname, int slaveNumber, String hash) throws RemoteException;
     boolean isRunning() throws RemoteException;
     int getCurrent() throws RemoteException;
     void update(int newIncrement, int changingPoint) throws RemoteException;
