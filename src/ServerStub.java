@@ -1,6 +1,7 @@
 import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.rmi.Naming;
+import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
@@ -15,6 +16,7 @@ public class ServerStub extends UnicastRemoteObject implements ServerCommInterfa
     static MessageDigest md;
     static ClientCommInterface client;
     static CountDownLatch latch;
+    static String teamName;
 
     public ServerStub() throws RemoteException {
         super();
@@ -23,16 +25,19 @@ public class ServerStub extends UnicastRemoteObject implements ServerCommInterfa
     public static void main(String[] args) {
         latch = new CountDownLatch(1);
         try {
+            System.setProperty("java.rmi.server.hostname", "192.168.1.1");
+            System.setProperty("java.security.policy","security.policy");
             LocateRegistry.createRegistry(1099);
             ServerCommInterface server = new ServerStub();
-            Naming.rebind("rmi://localhost/ServerCommService", server);
+            Naming.rebind("rmi://192.168.1.1:1099/ServerCommService", server);
             System.out.println("Server started correctly");
         } catch (RemoteException | MalformedURLException e) {
             throw new RuntimeException(e);
         }
         try {
             latch.await();
-        } catch (InterruptedException e) {
+            client = (ClientCommInterface) Naming.lookup("rmi://192.168.1.5:1099/" + teamName);
+        } catch (InterruptedException | MalformedURLException | NotBoundException | RemoteException e) {
             throw new RuntimeException(e);
         }
         try {
@@ -62,8 +67,8 @@ public class ServerStub extends UnicastRemoteObject implements ServerCommInterfa
     }
 
     @Override
-    public void register(String teamName, ClientCommInterface cc) throws Exception {
-        client = (ClientCommInterface) Naming.lookup("rmi://localhost/" + teamName);
+    public void register(String teamName, ClientCommInterface cc) {
+        ServerStub.teamName = teamName;
         latch.countDown();
     }
 

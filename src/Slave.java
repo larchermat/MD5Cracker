@@ -3,6 +3,7 @@ import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -19,49 +20,58 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
     int current;
     MessageDigest md;
     MasterIF master;
-    int slaveNumber = 1;
+    int slaveNumber;
     boolean waiting;
+    boolean isNewProblem;
+    boolean isUpdate;
+    int newIncrement;
+    int changingPoint;
     private CountDownLatch latch;
 
     public Slave() throws NoSuchAlgorithmException, UnsupportedEncodingException, RemoteException {
         super();
+
         running = false;
+        isNewProblem = false;
+        isUpdate = false;
         md = MessageDigest.getInstance("MD5");
         hash = "";
         current = 0;
         wordsMap = new HashMap<>();
-
-        Scanner scanner = new Scanner(System.in);
-
-        System.out.println("Input the name of the client");
-        String name = scanner.nextLine();
-        System.out.println("Input the hostname");
-        String hostName = scanner.nextLine();
-        String slaveServiceName = "SlaveClientService_" + name;
-        try {
-            Naming.rebind("rmi://" + hostName + "/" + slaveServiceName, this);
-        } catch (RemoteException | MalformedURLException e) {
-            throw new RuntimeException(e);
-        }
-        String[] details = {hostName, slaveServiceName};
-
-        try {
-            master = (MasterIF) Naming.lookup("rmi://" + hostName + "/CrackerMasterService");
-        } catch (NotBoundException | MalformedURLException | RemoteException e) {
-            throw new RuntimeException(e);
-        }
-        slaveNumber = Integer.parseInt(name);
-        try {
-            master.registerSlave(details);
-        } catch (RemoteException e) {
-            throw new RuntimeException(e);
-        }
-        lifecycle();
     }
 
     public static void main(String[] args) {
         try {
-            new Slave();
+            System.setProperty("java.rmi.server.hostname", "192.168.1.1");
+            //LocateRegistry.createRegistry(1099);
+            Slave slave = new Slave();
+            Scanner scanner = new Scanner(System.in);
+
+            System.out.println("Input the name of the client");
+            String name = scanner.nextLine();
+            slave.slaveNumber = Integer.parseInt(name);
+            System.out.println("Input the hostname");
+            String hostName = scanner.nextLine() + ":1099";
+            String slaveServiceName = "SlaveClientService_" + name;
+            try {
+                Naming.rebind("rmi://" + hostName + "/" + slaveServiceName, slave);
+            } catch (RemoteException | MalformedURLException e) {
+                throw new RuntimeException(e);
+            }
+            String[] details = {hostName, slaveServiceName};
+
+            try {
+                slave.master = (MasterIF) Naming.lookup("rmi://192.168.1.5:1099/FSociety");
+            } catch (NotBoundException | MalformedURLException | RemoteException e) {
+                throw new RuntimeException(e);
+            }
+            System.out.println("Master was fetched");
+            try {
+                slave.master.registerSlave(details);
+            } catch (RemoteException e) {
+                throw new RuntimeException(e);
+            }
+            slave.lifecycle();
             System.out.println("Closing main");
         } catch (NoSuchAlgorithmException | UnsupportedEncodingException | RemoteException e) {
             throw new RuntimeException(e);
@@ -71,12 +81,9 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
 
     public void search() {
         Integer solution;
-        //System.out.println("Need wordsMap row 72");
         synchronized (wordsMap) {
-            //System.out.println("Locked wordsMap row 74");
             solution = wordsMap.getOrDefault(hash, null);
         }
-        //System.out.println("Unlocked wordsMap row 77");
         if (solution != null) {
             try {
                 master.receiveSolution(hash, solution, "slave" + slaveNumber);
@@ -90,36 +97,33 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
     public void receiveTask(String hash) throws RemoteException {
         System.out.println("Slave " + slaveNumber + " received task " + hash);
         this.hash = hash;
-        search();
+        isNewProblem = true;
     }
 
     @Override
-    public void start(int base, int increment, String masterHostName, int slaveNumber, String hash) {
+    public void start(int base, int increment, String hash) {
         System.out.println("Slave running");
-        /*try {
-            master = (MasterIF) Naming.lookup("rmi://" + masterHostName + "/CrackerMasterService");
-        } catch (NotBoundException | MalformedURLException | RemoteException e) {
-            throw new RuntimeException(e);
-        }*/
         running = true;
-        //waiting = false;
         current = base;
         this.increment = increment;
-        this.slaveNumber = slaveNumber;
         this.hash = hash;
         System.out.println("Current: " + current + " , increment: " + increment);
     }
 
     public void lifecycle() {
         while (running) {
+            if (isUpdate)
+                updateSelf();
+            if (isNewProblem)
+                search();
             if (!waiting) {
                 run();
             } else {
                 try {
-                    //master.slaveWaiting(slaveNumber, waiting);
+                    master.slaveWaiting(slaveNumber, true);
                     latch.await();
-                    //master.slaveWaiting(slaveNumber, waiting);
-                } catch (InterruptedException e) {
+                    master.slaveWaiting(slaveNumber, false);
+                } catch (InterruptedException | RemoteException e) {
                     throw new RuntimeException(e);
                 }
             }
@@ -138,6 +142,13 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
 
     @Override
     synchronized public void update(int newIncrement, int changingPoint) {
+        this.newIncrement = newIncrement;
+        this.changingPoint = changingPoint;
+        isUpdate = true;
+        latch.countDown();
+    }
+
+    public void updateSelf() {
         if (current != changingPoint) {
             for (int i = 0; i < increment; i++) {
                 if ((changingPoint - i - current) % increment == 0) {
@@ -155,26 +166,17 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
         } catch (RemoteException e) {
             throw new RuntimeException(e);
         }
-        latch.countDown();
+        isUpdate = false;
         System.out.println("Current: " + current + " , increment: " + increment);
     }
 
     @Override
     public void setWaiting(boolean waiting) {
         System.out.println("Slave " + slaveNumber + " is " + (waiting ? "waiting" : "not waiting"));
+        this.waiting = waiting;
         if (waiting) {
             latch = new CountDownLatch(1);
-            System.out.println("End if");
         }
-        try {
-            master.slaveWaiting(slaveNumber, waiting);
-            System.out.println("End try");
-        } catch (RemoteException e) {
-            throw new RuntimeException(e);
-        }
-        System.out.println("Out try");
-        this.waiting = waiting;
-        System.out.println("setWaiting ended");
     }
 
     public void run() {
@@ -186,14 +188,11 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
         }
         try {
             String hashStr = new String(bytes, "UTF-8");
-            //System.out.println("Need wordsMap row 178");
             synchronized (wordsMap) {
-                //System.out.println("Locked wordsMap row 180");
                 wordsMap.put(hashStr, current);
             }
-            //System.out.println("Unlocked wordsMap row 183");
             if (hash.equals(hashStr)) {
-                System.out.println("Found solution");
+                System.out.println("Found solution " + current);
                 master.receiveSolution(hashStr, current, "slave" + slaveNumber);
             }
             current = current + increment;
