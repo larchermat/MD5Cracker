@@ -17,6 +17,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
     ServerCommInterface server;
     String hash;
     final Map<String, Integer> hashMap;
+    final BSTree hashTree;
     final List<SlaveInfo> slaves;
     final List<Boolean> slavesUpdatedList;
     final List<Boolean> slavesWaitingList;
@@ -30,15 +31,17 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
     boolean isNewProblem;
     boolean isUpdate;
     private CountDownLatch latch1;
+    int threshold;
 
     public Master() throws RemoteException {
         super();
-
+        threshold = 1000000;
         hash = "";
         slaves = new ArrayList<>();
         slavesUpdatedList = new ArrayList<>();
         slavesWaitingList = new ArrayList<>();
         hashMap = new HashMap<>();
+        hashTree = new BSTree();
         current = 0;
         increment = 1;
         updated = true;
@@ -55,11 +58,12 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
     }
 
     public static void main(String[] args) {
+        Master master = null;
         try {
             System.setProperty("java.security.policy", "security.policy");
             System.setProperty("java.rmi.server.hostname", "192.168.1.5");
             LocateRegistry.createRegistry(1099);
-            Master master = new Master();
+            master = new Master();
             master.server = (ServerCommInterface) Naming.lookup("rmi://192.168.1.1:1099/ServerCommService");
             Naming.rebind("rmi://192.168.1.5:1099/FSociety", master);
             System.out.println("Master started correctly");
@@ -70,6 +74,10 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
             throw new RuntimeException(e);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        } catch (OutOfMemoryError error) {
+            if(master != null)
+                System.out.println("Current " + master.current);
+            throw new RuntimeException(error);
         }
         System.out.println("Closing main");
     }
@@ -110,7 +118,6 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
     public void updateSlaves() {
         System.out.println("Slaves update started");
         setSlavesUpdated();
-        setSlavesWaiting();
         int size;
         synchronized (slaves) {
             size = slaves.size();
@@ -119,6 +126,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         }
         latch1 = new CountDownLatch(1);
         waiting = true;
+        setSlavesWaiting();
         System.out.println("Slaves are up to date on the last update");
         synchronized (slaves) {
             for (SlaveInfo s : slaves) {
@@ -189,11 +197,12 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         while (true) {
             if (isUpdate)
                 updateSlaves();
-            if (isNewProblem)
-                newProblemReceived();
-            if (!waiting && current <= 6000000) {
+            if (!waiting) {
+                if(current >= threshold){
+                    System.out.println("Current " + current);
+                    threshold += 1000000;
+                }
                 run();
-                System.out.println(current);
             } else {
                 try {
                     latch1.await();
@@ -201,6 +210,8 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
                     throw new RuntimeException(e);
                 }
             }
+            if (isNewProblem)
+                newProblemReceived();
         }
     }
 
@@ -234,12 +245,16 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         }
         try {
             String hashStr = new String(bytes, "UTF-8");
-            synchronized (hashMap) {
-                hashMap.put(hashStr, current);
+            int checksum = 0;
+            for (int j = 0; j < hashStr.length(); j++) {
+                checksum += hashStr.charAt(j);
             }
+            hashTree.add(checksum, current);
+
             synchronized (hash) {
                 if (hashStr.equals(hash)) {
                     try {
+                        System.out.println("Solution found in run");
                         receiveSolution(hashStr, current, "master");
                     } catch (RemoteException e) {
                         e.printStackTrace();
@@ -255,26 +270,29 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
     public void search() {
         System.out.println("Searching");
         synchronized (hash) {
-            Integer solution;
-            synchronized (hashMap) {
-                solution = hashMap.getOrDefault(hash, null);
+            int checksum = 0;
+            for (int j = 0; j < hash.length(); j++) {
+                checksum += hash.charAt(j);
             }
-            if (solution != null) {
-                try {
-                    System.out.println("Solution found");
-                    receiveSolution(hash, solution, "master");
-                } catch (RemoteException e) {
-                    throw new RuntimeException(e);
+            TreeNode node = hashTree.find(checksum);
+            if (node != null) {
+                Integer solution = node.getNumberForHash(hash);
+                if (solution != null) {
+                    try {
+                        System.out.println("Solution found");
+                        receiveSolution(hash, solution, "master");
+                    } catch (RemoteException e) {
+                        throw new RuntimeException(e);
+                    }
                 }
             }
         }
         System.out.println("Done search");
-        waiting = false;
-        latch1.countDown();
+        //waiting = false;
+        //latch1.countDown();
     }
 
     public void update(int newIncrement, int changingPoint) {
-        System.out.println("Started update on master");
         if (current != changingPoint) {
             for (int i = 0; i < increment; i++) {
                 if ((changingPoint - i - current) % increment == 0) {
@@ -289,7 +307,6 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         increment = newIncrement;
         updated = true;
         System.out.println("Current: " + current + " , increment: " + increment);
-        System.out.println("Resumed");
     }
 
     @Override
@@ -299,11 +316,12 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
             this.hash = new String(hash, "UTF-8");
         }
         isNewProblem = true;
-        latch1 = new CountDownLatch(1);
-        waiting = true;
+        //latch1 = new CountDownLatch(1);
+        //waiting = true;
     }
 
     public void newProblemReceived() {
+        isNewProblem = false;
         synchronized (slaves) {
             slaves.forEach(slaveInfo ->
             {
@@ -314,8 +332,6 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
                 }
             });
         }
-        System.out.println("Problem passed to slaves");
         search();
-        isNewProblem = false;
     }
 }

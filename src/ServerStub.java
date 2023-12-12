@@ -10,8 +10,8 @@ import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.CountDownLatch;
 
 public class ServerStub extends UnicastRemoteObject implements ServerCommInterface {
-    final static String[] hashes = {"34", "19857", "98753", "234928", "89832", "3", "1532343", "1532344", "1532345", "1532346",
-            "2532346", "2532347", "2532348", "2532349", "5532350", "5532346", "5532347", "5532348", "5532349", "5532350"};
+    final static String[] hashes = {"34", "19857", "98753", "234928", "89832", "3", "153233", "153234", "153235", "153236",
+            "253236", "253237", "253238", "253239", "553240", "553236", "553237", "553238", "553239", "553240"};
     static String currentWord = "";
     static MessageDigest md;
     static ClientCommInterface client;
@@ -24,9 +24,10 @@ public class ServerStub extends UnicastRemoteObject implements ServerCommInterfa
 
     public static void main(String[] args) {
         latch = new CountDownLatch(1);
+
         try {
             System.setProperty("java.rmi.server.hostname", "192.168.1.1");
-            System.setProperty("java.security.policy","security.policy");
+            System.setProperty("java.security.policy", "security.policy");
             LocateRegistry.createRegistry(1099);
             ServerCommInterface server = new ServerStub();
             Naming.rebind("rmi://192.168.1.1:1099/ServerCommService", server);
@@ -34,36 +35,42 @@ public class ServerStub extends UnicastRemoteObject implements ServerCommInterfa
         } catch (RemoteException | MalformedURLException e) {
             throw new RuntimeException(e);
         }
+
         try {
             latch.await();
             client = (ClientCommInterface) Naming.lookup("rmi://192.168.1.5:1099/" + teamName);
         } catch (InterruptedException | MalformedURLException | NotBoundException | RemoteException e) {
             throw new RuntimeException(e);
         }
+
         try {
             md = MessageDigest.getInstance("MD5");
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException(e);
         }
 
+        long start = System.currentTimeMillis();
+
         for (int i = 0; i < hashes.length; i++) {
-            latch = new CountDownLatch(1);
             try {
                 byte[] bytes = md.digest(hashes[i].getBytes("UTF-8"));
+                String word = new String(bytes, "UTF-8");
+                try {
+                    latch.await();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
                 synchronized (currentWord) {
-                    currentWord = new String(bytes, "UTF-8");
+                    currentWord = word;
                 }
                 client.publishProblem(bytes, hashes[i].length());
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-            try {
-                latch.await();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
+            latch = new CountDownLatch(1);
         }
-        System.out.println("Finished hashes");
+        long timeNeeded = System.currentTimeMillis() - start;
+        System.out.println("Finished hashes in " + (timeNeeded / 1000.00) + " seconds");
     }
 
     @Override
