@@ -13,7 +13,7 @@ public interface SlaveIF extends Remote {
      * @param problemSize
      * @throws RemoteException
      */
-    void receiveTask(byte[] hash, int problemSize) throws RemoteException;
+    void receiveTask(String hash, int problemSize) throws RemoteException;
 
     /**
      * Metodo che da' il via ad uno slave
@@ -23,7 +23,7 @@ public interface SlaveIF extends Remote {
      * @param problemSize dimensione del problema
      * @throws RemoteException
      */
-    void start(int base, int increment, byte[] hash, int problemSize) throws RemoteException;
+    void start(int base, int increment, String hash, int problemSize) throws RemoteException;
 
     /**
      * Getter della variabile running

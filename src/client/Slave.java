@@ -9,7 +9,6 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 
 /**
@@ -27,7 +26,7 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
     CountDownLatch latch;
     int slaveNumber;
     //I seguenti campi corrispondono a quelli presenti nella classe Master
-    byte[] hash;
+    String hash;
     final BSTree hashTree;
     int increment;
     int current;
@@ -48,7 +47,7 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
         isNewProblem = false;
         isUpdate = false;
         md = MessageDigest.getInstance("MD5");
-        hash = new byte[]{0x01};
+        hash = "";
         current = 0;
         hashTree = new BSTree();
     }
@@ -94,14 +93,14 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
     }
 
     @Override
-    public void receiveTask(byte[] hash, int problemSize) throws RemoteException {
+    public void receiveTask(String hash, int problemSize) throws RemoteException {
         this.problemSize = problemSize;
         this.hash = hash;
         isNewProblem = true;
     }
 
     @Override
-    public void start(int base, int increment, byte[] hash, int problemSize) {
+    public void start(int base, int increment, String hash, int problemSize) {
         running = true;
         current = base;
         this.increment = increment;
@@ -169,32 +168,34 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
     }
 
     public void run() {
-        byte[] bytes = new byte[0];
+        byte[] bytes;
+        String hashStr = "";
         try {
             bytes = md.digest((String.valueOf(current).getBytes("UTF-8")));
+            hashStr = new String(bytes, "UTF-8");
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
         }
-        try {
-            int sum = 0;
-            for (byte b : bytes) {
-                sum += b;
-            }
-            hashTree.add(sum, current);
-            if (Arrays.equals(hash, bytes)) {
-                master.receiveSolution(bytes, current);
-            }
-            current = current + increment;
-        } catch (RemoteException e) {
-            e.printStackTrace();
+        int sum = 0;
+        for(int i = 0; i < hashStr.length(); i++) {
+            sum += hashStr.charAt(i);
         }
+        hashTree.add(sum, current);
+        if (hashStr.equals(hash)) {
+            try {
+                master.receiveSolution(hash, current);
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
+        }
+        current = current + increment;
     }
 
     public void search() {
         isNewProblem = false;
         int sum = 0;
-        for (byte b : hash) {
-            sum += b;
+        for(int i = 0; i < hash.length(); i++) {
+            sum += hash.charAt(i);
         }
         TreeNode node = hashTree.find(sum);
         if (node != null) {

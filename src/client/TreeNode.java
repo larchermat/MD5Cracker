@@ -4,7 +4,6 @@ import java.io.UnsupportedEncodingException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -36,7 +35,7 @@ public class TreeNode {
      * @param word hash da trovare
      * @return il numero corrispondente alla soluzione, null in caso non venisse trovato
      */
-    public Integer getNumberForHash(byte[] word) {
+     public Integer getNumberForHash(String word) {
         MessageDigest md;
         try {
             md = MessageDigest.getInstance("MD5");
@@ -45,23 +44,19 @@ public class TreeNode {
         }
         Integer number = null;
         byte[] hashNum;
+        String hash;
         for (Integer num : numList) {
             try {
                 hashNum = md.digest(String.valueOf(num).getBytes("UTF-8"));
+                hash = new String(hashNum, "UTF-8");
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
             }
-            if (Arrays.equals(hashNum, word)) {
+            if (hash.equals(word)){
                 number = num;
                 break;
             }
         }
         return number;
     }
-
-    @Override
-    public String toString() {
-        return key + " cheksums: " + numList.size();
-    }
-
 }

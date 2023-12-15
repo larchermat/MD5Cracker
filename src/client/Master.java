@@ -7,11 +7,11 @@ import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -23,7 +23,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
     /**
      * Il corrente problema da risolvere
      */
-    byte[] hash;
+    String hash;
     /**
      * Struttura dati utilizzata per salvare i numeri gia' hashati in precedenza
      */
@@ -78,7 +78,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
 
     public Master() throws RemoteException {
         super();
-        hash = new byte[]{0x01};
+        hash = "";
         slaves = new ArrayList<>();
         slavesUpdatedList = new ArrayList<>();
         slavesWaitingList = new ArrayList<>();
@@ -102,7 +102,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         try {
             System.setProperty("java.security.policy", "security.policy");
             System.setProperty("java.rmi.server.hostname", args[0]);
-            //LocateRegistry.createRegistry(1099);
+            LocateRegistry.createRegistry(1099);
             master = new Master();
             Naming.rebind("rmi://" + args[0] + ":1099/CrackerMasterService", master);
             System.out.println("client.Master started correctly");
@@ -126,15 +126,15 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
     public void publishProblem(byte[] hash, int problemsize) throws Exception {
         this.problemSize = problemsize;
         synchronized (this.hash) {
-            this.hash = hash;
+            this.hash = new String(hash, "UTF-8");
         }
         isNewProblem = true;
     }
 
     @Override
-    public void receiveSolution(byte[] hash, int solution) throws RemoteException {
+    public void receiveSolution(String hash, int solution) throws RemoteException {
         //Il metodo prima si assicura che l'hash soluzione sia uguale a quello ricercato
-        if (Arrays.equals(this.hash, hash)) {
+        if (this.hash.equals(hash)) {
             try {
                 server.submitSolution("FSociety", String.valueOf(solution));
             } catch (Exception e) {
@@ -219,30 +219,22 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
                 updateSlaves();
             if (current <= problemSize) {
                 run();
-            } /*else {
-                break;
-            }*/
+            }
             if (isNewProblem)
                 newProblemReceived();
         }
-        //System.out.println("Reached cap");
-        //System.out.println("Current:" + current + ", increment:" + increment);
     }
 
     /**
      * Metodo che aggiorna gli slave (chiamato solo quando e' presente un nuovo slave)
      */
     public void updateSlaves() {
-        //setSlavesUpdated();
 
         synchronized (slaves) {
             int size = slaves.size();
 
             //Attendiamo finche' tutti gli slaves non sono aggiornati prima di continuare con l'aggiornamento
-            while (!slavesUpdated) {
-            }
-
-            //setSlavesWaiting();
+            while (!slavesUpdated) {}
 
             //Mettiamo tutti gli slaves in attesa per aggiornare
             for (SlaveIF s : slaves) {
@@ -254,8 +246,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
             }
 
             //Attendiamo che tutti gli slave siano in attesa
-            while (!slavesWaiting) {
-            }
+            while (!slavesWaiting) {}
 
             //Per aggiornare gli slaves impostiamo il current massimo tra slaves e master come il nuovo obbiettivo da
             //raggiungere prima di cambiare increment
@@ -301,23 +292,24 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
      * l'hash corrente da trovare
      */
     public void run() {
-        byte[] bytes = new byte[0];
+        String hashStr = "";
         try {
-            bytes = md.digest((String.valueOf(current).getBytes("UTF-8")));
+            byte[] bytes = md.digest((String.valueOf(current).getBytes("UTF-8")));
+            hashStr = new String(bytes, "UTF-8");
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
         }
         int sum = 0;
-        for (byte aByte : bytes) {
-            sum += aByte;
+        for (int i = 0; i < hashStr.length(); i++) {
+            sum += hashStr.charAt(i);
         }
-        //Utilizziamo la somma dei valori di ogni byte come chiave di ricerca all'interno dell'albero
+        //Utilizziamo la somma dei valori di ogni carattere come chiave di ricerca all'interno dell'albero
         hashTree.add(sum, current);
 
         synchronized (hash) {
-            if (Arrays.equals(bytes, hash)) {
+            if (hashStr.equals(hash)) {
                 try {
-                    receiveSolution(bytes, current);
+                    receiveSolution(hashStr, current);
                 } catch (RemoteException e) {
                     e.printStackTrace();
                 }
@@ -332,8 +324,8 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
     public void search() {
         synchronized (hash) {
             int sum = 0;
-            for (byte b : hash) {
-                sum += b;
+            for (int i = 0; i < hash.length(); i++) {
+                sum += hash.charAt(i);
             }
             TreeNode node = hashTree.find(sum);
             if (node != null) {

@@ -10,10 +10,6 @@ public class BSTree {
         root = null;
     }
 
-    public BSTree(int key, int val) {
-        root = new TreeNode(key, val, null);
-    }
-
     public void add(int key, int val) {
         if (root == null)
             root = new TreeNode(key, val, null);

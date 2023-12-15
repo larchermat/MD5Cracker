@@ -13,7 +13,7 @@ public interface MasterIF extends Remote {
      * @param solution la soluzione del problema
      * @throws RemoteException
      */
-    void receiveSolution(byte[] hash, int solution) throws RemoteException;
+    void receiveSolution(String hash, int solution) throws RemoteException;
 
     /**
      * Metodo che registra un nuovo Slave
