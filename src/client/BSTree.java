@@ -1,5 +1,8 @@
 package client;
 
+/**
+ * Albero di ricerca binaria che utilizza nodi {@link TreeNode}
+ */
 public class BSTree {
     TreeNode root;
 

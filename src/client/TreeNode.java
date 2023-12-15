@@ -4,8 +4,13 @@ import java.io.UnsupportedEncodingException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
+/**
+ * Nodi dell'albero binario di ricerca {@link BSTree}, che utilizzano chiavi int corrispondenti alla somma dei byte
+ * degli hash, e contengono una lista con i numeri i cui hash hanno somma uguale a key
+ */
 public class TreeNode {
     int key;
     List<Integer> numList;
@@ -26,7 +31,12 @@ public class TreeNode {
         numList.add(val);
     }
 
-    public Integer getNumberForHash(String word) {
+    /**
+     * Metodo che ritorna, se esiste, il numero corrispondente ad un hash
+     * @param word hash da trovare
+     * @return il numero corrispondente alla soluzione, null in caso non venisse trovato
+     */
+    public Integer getNumberForHash(byte[] word) {
         MessageDigest md;
         try {
             md = MessageDigest.getInstance("MD5");
@@ -34,14 +44,14 @@ public class TreeNode {
             throw new RuntimeException(e);
         }
         Integer number = null;
+        byte[] hashNum;
         for (Integer num : numList) {
-            String hashNum;
             try {
-                hashNum = new String(md.digest(String.valueOf(num).getBytes("UTF-8")), "UTF-8");
+                hashNum = md.digest(String.valueOf(num).getBytes("UTF-8"));
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException(e);
             }
-            if (hashNum.equals(word)) {
+            if (Arrays.equals(hashNum, word)) {
                 number = num;
                 break;
             }
