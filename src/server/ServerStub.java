@@ -1,4 +1,6 @@
-import java.io.UnsupportedEncodingException;
+package server;
+
+import client.ClientCommInterface;
 import java.net.MalformedURLException;
 import java.rmi.Naming;
 import java.rmi.NotBoundException;
@@ -30,7 +32,7 @@ public class ServerStub extends UnicastRemoteObject implements ServerCommInterfa
             System.setProperty("java.security.policy", "security.policy");
             LocateRegistry.createRegistry(1099);
             ServerCommInterface server = new ServerStub();
-            Naming.rebind("rmi://192.168.1.1:1099/ServerCommService", server);
+            Naming.rebind("rmi://192.168.1.1:1099/server", server);
             System.out.println("Server started correctly");
         } catch (RemoteException | MalformedURLException e) {
             throw new RuntimeException(e);
@@ -38,8 +40,7 @@ public class ServerStub extends UnicastRemoteObject implements ServerCommInterfa
 
         try {
             latch.await();
-            client = (ClientCommInterface) Naming.lookup("rmi://192.168.1.5:1099/" + teamName);
-        } catch (InterruptedException | MalformedURLException | NotBoundException | RemoteException e) {
+        } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
 
@@ -76,6 +77,7 @@ public class ServerStub extends UnicastRemoteObject implements ServerCommInterfa
     @Override
     public void register(String teamName, ClientCommInterface cc) {
         ServerStub.teamName = teamName;
+        client = cc;
         latch.countDown();
     }
 

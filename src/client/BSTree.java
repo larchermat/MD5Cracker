@@ -1,3 +1,5 @@
+package client;
+
 public class BSTree {
     TreeNode root;
 

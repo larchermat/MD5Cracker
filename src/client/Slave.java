@@ -1,3 +1,5 @@
+package client;
+
 import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.rmi.Naming;
@@ -6,7 +8,6 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Scanner;
 import java.util.concurrent.CountDownLatch;
 
 public class Slave extends UnicastRemoteObject implements SlaveIF {
@@ -40,32 +41,31 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
 
     public static void main(String[] args) {
         try {
-            System.setProperty("java.rmi.server.hostname", "192.168.1.1");
+            System.setProperty("java.rmi.server.hostname", args[1]);
             //LocateRegistry.createRegistry(1099);
             Slave slave = new Slave();
-            Scanner scanner = new Scanner(System.in);
 
             System.out.println("Input the name of the client");
-            String name = scanner.nextLine();
+            String name = args[0];
             slave.slaveNumber = Integer.parseInt(name);
             System.out.println("Input the hostname");
-            String hostName = scanner.nextLine() + ":1099";
-            String slaveServiceName = "SlaveClientService_" + name;
+            String hostName = args[1] + ":1099";
+            String masterName = args[2];
+            String slaveServiceName = "CrackerSlaveService_" + name;
             try {
                 Naming.rebind("rmi://" + hostName + "/" + slaveServiceName, slave);
             } catch (RemoteException | MalformedURLException e) {
                 throw new RuntimeException(e);
             }
-            String[] details = {hostName, slaveServiceName};
 
             try {
-                slave.master = (MasterIF) Naming.lookup("rmi://192.168.1.5:1099/FSociety");
+                slave.master = (MasterIF) Naming.lookup("rmi://" + masterName + ":1099/CrackerMasterService");
             } catch (NotBoundException | MalformedURLException | RemoteException e) {
                 throw new RuntimeException(e);
             }
-            System.out.println("Master was fetched");
+            System.out.println("client.Master was fetched");
             try {
-                slave.master.registerSlave(details);
+                slave.master.registerSlave(slave);
             } catch (RemoteException e) {
                 throw new RuntimeException(e);
             }
@@ -93,7 +93,7 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
             if (solution != null) {
                 System.out.println("Solution found");
                 try {
-                    master.receiveSolution(hash, solution, "Slave " + slaveNumber);
+                    master.receiveSolution(hash, solution, "client.Slave " + slaveNumber);
                 } catch (RemoteException e) {
                     throw new RuntimeException(e);
                 }
@@ -103,14 +103,14 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
 
     @Override
     public void receiveTask(String hash) throws RemoteException {
-        System.out.println("Slave " + slaveNumber + " received task");
+        System.out.println("client.Slave " + slaveNumber + " received task");
         this.hash = hash;
         isNewProblem = true;
     }
 
     @Override
     public void start(int base, int increment, String hash) {
-        System.out.println("Slave running");
+        System.out.println("client.Slave running");
         running = true;
         current = base;
         this.increment = increment;
@@ -183,7 +183,7 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
 
     @Override
     public void setWaiting(boolean waiting) {
-        System.out.println("Slave " + slaveNumber + " is " + (waiting ? "waiting" : "not waiting"));
+        System.out.println("client.Slave " + slaveNumber + " is " + (waiting ? "waiting" : "not waiting"));
         this.waiting = waiting;
         if (waiting && running) {
             latch = new CountDownLatch(1);

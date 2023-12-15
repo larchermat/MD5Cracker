@@ -1,3 +1,7 @@
+package client;
+
+import server.ServerCommInterface;
+
 import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.rmi.Naming;
@@ -8,15 +12,12 @@ import java.rmi.server.UnicastRemoteObject;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
 public class Master extends UnicastRemoteObject implements MasterIF, ClientCommInterface {
     ServerCommInterface server;
     String hash;
-    final Map<String, Integer> hashMap;
     final BSTree hashTree;
     final List<SlaveInfo> slaves;
     final List<Boolean> slavesUpdatedList;
@@ -31,16 +32,14 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
     boolean isNewProblem;
     boolean isUpdate;
     private CountDownLatch latch1;
-    int threshold;
+    int problemSize;
 
     public Master() throws RemoteException {
         super();
-        threshold = 1000000;
         hash = "";
         slaves = new ArrayList<>();
         slavesUpdatedList = new ArrayList<>();
         slavesWaitingList = new ArrayList<>();
-        hashMap = new HashMap<>();
         hashTree = new BSTree();
         current = 0;
         increment = 1;
@@ -50,6 +49,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         slavesWaiting = false;
         isNewProblem = false;
         isUpdate = false;
+        problemSize = 5000000;
         try {
             md = MessageDigest.getInstance("MD5");
         } catch (NoSuchAlgorithmException e) {
@@ -61,12 +61,12 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         Master master = null;
         try {
             System.setProperty("java.security.policy", "security.policy");
-            System.setProperty("java.rmi.server.hostname", "192.168.1.5");
+            System.setProperty("java.rmi.server.hostname", args[0]);
             LocateRegistry.createRegistry(1099);
             master = new Master();
-            master.server = (ServerCommInterface) Naming.lookup("rmi://192.168.1.1:1099/ServerCommService");
-            Naming.rebind("rmi://192.168.1.5:1099/FSociety", master);
-            System.out.println("Master started correctly");
+            Naming.rebind("rmi://" + args[0] + ":1099/CrackerMasterService", master);
+            System.out.println("client.Master started correctly");
+            master.server = (ServerCommInterface) Naming.lookup("rmi://" + args[1] + ":1099/server");
             master.server.register("FSociety", master);
             master.lifecycle();
         } catch (RemoteException | NotBoundException | MalformedURLException e) {
@@ -75,7 +75,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         } catch (Exception e) {
             throw new RuntimeException(e);
         } catch (OutOfMemoryError error) {
-            if(master != null)
+            if (master != null)
                 System.out.println("Current " + master.current);
             throw new RuntimeException(error);
         }
@@ -87,7 +87,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         System.out.println("Solution received from " + thread);
         if (this.hash.equals(hash)) {
             try {
-                server.submitSolution(thread, String.valueOf(solution));
+                server.submitSolution("FSociety", String.valueOf(solution));
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -95,24 +95,19 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
     }
 
     @Override
-    public void registerSlave(String[] details) throws RemoteException {
+    public void registerSlave(SlaveIF slaveIF) throws RemoteException {
         System.out.println("New slave");
-        try {
-            SlaveIF newSlave = (SlaveIF) Naming.lookup("rmi://" + details[0] + "/" + details[1]);
-            synchronized (slaves) {
-                int slaveNumber = slaves.size();
-                slaves.add(new SlaveInfo(slaveNumber, newSlave));
-            }
-            synchronized (slavesUpdatedList) {
-                slavesUpdatedList.add(true);
-            }
-            synchronized (slavesWaitingList) {
-                slavesWaitingList.add(true);
-            }
-            isUpdate = true;
-        } catch (NotBoundException | MalformedURLException e) {
-            throw new RuntimeException(e);
+        synchronized (slaves) {
+            int slaveNumber = slaves.size();
+            slaves.add(new SlaveInfo(slaveNumber, slaveIF));
         }
+        synchronized (slavesUpdatedList) {
+            slavesUpdatedList.add(true);
+        }
+        synchronized (slavesWaitingList) {
+            slavesWaitingList.add(true);
+        }
+        isUpdate = true;
     }
 
     public void updateSlaves() {
@@ -127,7 +122,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         latch1 = new CountDownLatch(1);
         waiting = true;
         setSlavesWaiting();
-        System.out.println("Slaves are up to date on the last update");
+        //System.out.println("Slaves are up-to-date on the last update");
         synchronized (slaves) {
             for (SlaveInfo s : slaves) {
                 try {
@@ -140,7 +135,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         while (!slavesWaiting) {
         }
         int max = current;
-        System.out.println("Slaves are all currently waiting");
+        //System.out.println("Slaves are all currently waiting");
         synchronized (slaves) {
             for (SlaveInfo s : slaves) {
                 int slaveCurrent;
@@ -169,14 +164,14 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
                     throw new RuntimeException(e);
                 }
             }
-            System.out.println("Slaves update finished");
+            //System.out.println("Slaves update finished");
         }
         isUpdate = false;
     }
 
     @Override
     public void slaveUpdated(int slaveNumber) {
-        System.out.println("Slave " + slaveNumber + " is up to date");
+        //System.out.println("client.Slave " + slaveNumber + " is up to date");
         synchronized (slavesUpdatedList) {
             slavesUpdatedList.set(slaveNumber, true);
         }
@@ -185,7 +180,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
 
     @Override
     public void slaveWaiting(int slaveNumber, boolean slaveWaiting) {
-        System.out.println("Slave " + slaveNumber + " is " + (slaveWaiting ? "waiting" : "not waiting"));
+        //System.out.println("client.Slave " + slaveNumber + " is " + (slaveWaiting ? "waiting" : "not waiting"));
         synchronized (slavesWaitingList) {
             slavesWaitingList.set(slaveNumber, slaveWaiting);
         }
@@ -197,11 +192,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         while (true) {
             if (isUpdate)
                 updateSlaves();
-            if (!waiting) {
-                if(current >= threshold){
-                    System.out.println("Current " + current);
-                    threshold += 1000000;
-                }
+            if (!waiting && current <= problemSize) {
                 run();
             } else {
                 try {
@@ -222,18 +213,18 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
                 temp = temp && b;
         }
         slavesUpdated = temp && updated;
-        System.out.println("In method slaves are " + (slavesUpdated ? "updated" : "not updated"));
+        //System.out.println("In method slaves are " + (slavesUpdated ? "updated" : "not updated"));
     }
 
     public void setSlavesWaiting() {
-        System.out.println("setSlavesWaiting is being executed");
+        //System.out.println("setSlavesWaiting is being executed");
         boolean temp = true;
         synchronized (slavesWaitingList) {
             for (Boolean b : slavesWaitingList)
                 temp = temp && b;
         }
         slavesWaiting = temp && waiting;
-        System.out.println("In method slaves are " + (slavesWaiting ? "waiting" : "not waiting"));
+        //System.out.println("In method slaves are " + (slavesWaiting ? "waiting" : "not waiting"));
     }
 
     public void run() {
@@ -268,7 +259,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
     }
 
     public void search() {
-        System.out.println("Searching");
+        //System.out.println("Searching");
         synchronized (hash) {
             int checksum = 0;
             for (int j = 0; j < hash.length(); j++) {
@@ -287,7 +278,7 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
                 }
             }
         }
-        System.out.println("Done search");
+        //System.out.println("Done search");
         //waiting = false;
         //latch1.countDown();
     }
@@ -306,11 +297,12 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         }
         increment = newIncrement;
         updated = true;
-        System.out.println("Current: " + current + " , increment: " + increment);
+        //System.out.println("Current: " + current + " , increment: " + increment);
     }
 
     @Override
     public void publishProblem(byte[] hash, int problemsize) throws Exception {
+        this.problemSize = problemsize;
         System.out.println("Receiving new problem");
         synchronized (this.hash) {
             this.hash = new String(hash, "UTF-8");
