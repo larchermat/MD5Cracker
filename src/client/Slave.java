@@ -55,6 +55,7 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
     public static void main(String[] args) {
         try {
             System.setProperty("java.rmi.server.hostname", args[1]);
+            System.setProperty("java.security.policy", "security.policy");
             //LocateRegistry.createRegistry(1099);
             Slave slave = new Slave();
             String name = args[0];
@@ -79,6 +80,7 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
             } catch (RemoteException e) {
                 throw new RuntimeException(e);
             }
+            System.out.println("Slave was registered");
             try {
                 //Attesa prima che il master chiami il metodo start di slave
                 slave.latch.await();
@@ -146,6 +148,7 @@ public class Slave extends UnicastRemoteObject implements SlaveIF {
      * slave comunica al master di aver finito di attendere
      */
     public void lifecycle() {
+        System.out.println("Lifecycle started");
         while (running) {
             if (waiting) {
                 try {

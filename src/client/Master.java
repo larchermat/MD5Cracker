@@ -1,13 +1,7 @@
 package client;
 
-import server.ServerCommInterface;
-
 import java.io.UnsupportedEncodingException;
-import java.net.MalformedURLException;
-import java.rmi.Naming;
-import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
-import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -15,11 +9,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Classe che rappresenta il Client che comunica con il server. Il suo compito e' quello di produrre hash e cercare
+ * Classe che comunica con il Client. Il suo compito e' quello di produrre hash e cercare
  * soluzioni come gli {@link Slave Slave}, e allo stesso tempo gestirli
  */
-public class Master extends UnicastRemoteObject implements MasterIF, ClientCommInterface {
-    ServerCommInterface server;
+public class Master extends UnicastRemoteObject implements MasterIF {
+    Client server;
     /**
      * Il corrente problema da risolvere
      */
@@ -89,7 +83,6 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         slavesWaiting = true;
         isNewProblem = false;
         isUpdate = false;
-        problemSize = 20000000;
         try {
             md = MessageDigest.getInstance("MD5");
         } catch (NoSuchAlgorithmException e) {
@@ -97,46 +90,12 @@ public class Master extends UnicastRemoteObject implements MasterIF, ClientCommI
         }
     }
 
-    public static void main(String[] args) {
-        Master master = null;
-        try {
-            System.setProperty("java.security.policy", "security.policy");
-            System.setProperty("java.rmi.server.hostname", args[0]);
-            LocateRegistry.createRegistry(1099);
-            master = new Master();
-            Naming.rebind("rmi://" + args[0] + ":1099/CrackerMasterService", master);
-            System.out.println("client.Master started correctly");
-            master.server = (ServerCommInterface) Naming.lookup("rmi://" + args[1] + ":1099/server");
-            master.server.register("FSociety", master);
-            master.lifecycle();
-        } catch (RemoteException | NotBoundException | MalformedURLException e) {
-            System.out.println("Cracker master failed");
-            throw new RuntimeException(e);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        } catch (OutOfMemoryError error) {
-            if (master != null)
-                System.out.println("Current " + master.current);
-            throw new RuntimeException(error);
-        }
-        System.out.println("Closing main");
-    }
-
-    @Override
-    public void publishProblem(byte[] hash, int problemsize) throws Exception {
-        this.problemSize = problemsize;
-        synchronized (this.hash) {
-            this.hash = new String(hash, "UTF-8");
-        }
-        isNewProblem = true;
-    }
-
     @Override
     public void receiveSolution(String hash, int solution) throws RemoteException {
         //Il metodo prima si assicura che l'hash soluzione sia uguale a quello ricercato
         if (this.hash.equals(hash)) {
             try {
-                server.submitSolution("FSociety", String.valueOf(solution));
+                server.submitSolution(String.valueOf(solution));
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
